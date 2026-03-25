@@ -1,4 +1,4 @@
-// routes/accountRoutes.js
+
 import express from "express";
 import { getBalance, addMoney } from "../controllers/accountController.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";

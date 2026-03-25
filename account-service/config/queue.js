@@ -1,4 +1,4 @@
-// // config/queue.js
+
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 
