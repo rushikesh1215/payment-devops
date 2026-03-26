@@ -1,0 +1,119 @@
+
+services:
+
+  payment-redis:
+    image: redis:latest
+    container_name: payment-redis
+    networks:
+      - payment-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  payment-mongodb:
+    image: mongodb/mongodb-community-server:latest-slim
+    container_name: payment-mongodb
+    networks:
+      - payment-network
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  payment-mysql:
+    image: mariadb:12.3.1-ubi10-rc
+    container_name: payment-mysql
+    environment:
+      - MARIADB_ROOT_PASSWORD=admin
+      - MARIADB_DATABASE=ledger_service
+    networks:
+      - payment-network
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-padmin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ----------------------------------------------------
+  payment-auth:
+    image: auth-service
+    container_name: payment-auth
+    ports:
+      - "3001:3001"
+    depends_on:
+      payment-mongodb:
+        condition: service_healthy
+    networks:
+      - payment-network
+    environment:
+      - PORT=3001
+      - MONGO_URI=mongodb://payment-mongodb:27017/auth-service
+      - JWT_SECRET=secret123
+
+  payment-account:
+    image: account-service
+    container_name: payment-account
+    ports:
+      - "3002:3002"
+    depends_on:
+      payment-mongodb:
+        condition: service_healthy
+      payment-redis:
+        condition: service_healthy
+    networks:
+      - payment-network
+    environment:
+      - PORT=3002
+      - MONGO_URI=mongodb://payment-mongodb:27017/account-service
+      - REDIS_URL=redis://payment-redis:6379
+
+  payment-ledger:
+    image: ledger-service
+    container_name: payment-ledger
+    ports:
+      - "3004:3004"
+    depends_on:
+      payment-mysql:
+        condition: service_healthy
+      payment-redis:
+        condition: service_healthy
+    networks:
+      - payment-network
+    environment:
+      - PORT=3004
+      - DB_URI=mysql://root:admin@payment-mysql:3306/ledger_service
+      - REDIS_URL=redis://payment-redis:6379
+
+  payment-service:
+    image: payment-service
+    container_name: payment-service-main
+    ports:
+      - "4000:4000"
+    depends_on:
+      payment-mongodb:
+        condition: service_healthy
+      payment-redis:
+        condition: service_healthy
+    networks:
+      - payment-network
+    environment:
+      - PORT=4000
+      - MONGO_URI=mongodb://payment-mongodb:27017/payment-service
+      - REDIS_URL=redis://payment-redis:6379
+
+# -----------------------------
+
+networks:
+  payment-network:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  mysql-data:
